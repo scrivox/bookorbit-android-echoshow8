@@ -10,15 +10,23 @@ plugins {
     alias(libs.plugins.play.publisher)
 }
 
-// Release signing is loaded from keystore.properties (gitignored, see keystore.properties.example)
-// rather than committed, so debug/lint/test builds and CI runs without secrets keep working.
+// Release signing — two supported sources, checked in order:
+//   1. Gradle user properties (~/.gradle/gradle.properties, outside the repo) via BOOKORBIT_* keys.
+//   2. app/keystore.properties (gitignored, see keystore.properties.example) — existing CI path.
+// Whichever source is present wins; neither is required for debug/lint/test builds.
+val gradleKeystoreFile     = project.findProperty("BOOKORBIT_KEYSTORE_FILE")     as String?
+val gradleKeystorePassword = project.findProperty("BOOKORBIT_KEYSTORE_PASSWORD") as String?
+val gradleKeyAlias         = project.findProperty("BOOKORBIT_KEY_ALIAS")         as String?
+val gradleKeyPassword      = project.findProperty("BOOKORBIT_KEY_PASSWORD")      as String?
+val hasGradleSigning = listOf(gradleKeystoreFile, gradleKeystorePassword, gradleKeyAlias, gradleKeyPassword).all { it != null }
+
 val keystoreProperties = Properties().apply {
     val propsFile = rootProject.file("app/keystore.properties")
     if (propsFile.exists()) {
         propsFile.inputStream().use { load(it) }
     }
 }
-val hasReleaseSigning = keystoreProperties.containsKey("storeFile")
+val hasReleaseSigning = hasGradleSigning || keystoreProperties.containsKey("storeFile")
 
 // Play publishing (Gradle Play Publisher) is only configured when a service account credentials
 // file is present. It's gitignored; CI writes it from the PLAY_SERVICE_ACCOUNT_JSON secret. Never
@@ -82,10 +90,17 @@ android {
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
-                storeFile = project.file(keystoreProperties.getProperty("storeFile"))
-                storePassword = keystoreProperties.getProperty("storePassword")
-                keyAlias = keystoreProperties.getProperty("keyAlias")
-                keyPassword = keystoreProperties.getProperty("keyPassword")
+                if (hasGradleSigning) {
+                    storeFile = file(gradleKeystoreFile!!)
+                    storePassword = gradleKeystorePassword
+                    keyAlias = gradleKeyAlias
+                    keyPassword = gradleKeyPassword
+                } else {
+                    storeFile = project.file(keystoreProperties.getProperty("storeFile"))
+                    storePassword = keystoreProperties.getProperty("storePassword")
+                    keyAlias = keystoreProperties.getProperty("keyAlias")
+                    keyPassword = keystoreProperties.getProperty("keyPassword")
+                }
             }
         }
     }
