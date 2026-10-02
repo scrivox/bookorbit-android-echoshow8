@@ -1,5 +1,7 @@
 package com.bookorbit.feature.main
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -8,11 +10,15 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Adjust
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.GridView
@@ -23,6 +29,12 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import com.bookorbit.feature.player.PlayerViewModel
+import com.bookorbit.ui.LocalImageUrls
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -223,6 +235,10 @@ fun MainShell(
                             icon = { Icon(tab.icon, contentDescription = tab.label) },
                         )
                     }
+                    Spacer(Modifier.weight(1f))
+                    if (currentRoute != Tab.DASHBOARD.route) {
+                        RailNowPlaying(onOpenPlayer = onOpenPlayer)
+                    }
                 }
                 Scaffold(
                     topBar = {
@@ -231,7 +247,9 @@ fun MainShell(
                             TopAppBar(title = { Text(title) })
                         }
                     },
-                    bottomBar = { MiniPlayer(onOpenPlayer = onOpenPlayer) },
+                    bottomBar = {
+                        if (currentRoute == Tab.DASHBOARD.route) MiniPlayer(onOpenPlayer = onOpenPlayer)
+                    },
                     // Insets already absorbed by the outer Row.
                     contentWindowInsets = WindowInsets(0),
                 ) { padding ->
@@ -271,6 +289,39 @@ fun MainShell(
             ) { padding ->
                 navHost(Modifier.padding(padding))
             }
+        }
+    }
+}
+
+@Composable
+private fun RailNowPlaying(
+    onOpenPlayer: () -> Unit,
+    modifier: Modifier = Modifier,
+    vm: PlayerViewModel = hiltViewModel(),
+) {
+    val state by vm.state.collectAsStateWithLifecycle()
+    val book = state.currentBook ?: return
+    val imageUrls = LocalImageUrls.current
+
+    Column(
+        modifier = modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        AsyncImage(
+            model = imageUrls.cover(book.id),
+            contentDescription = book.title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onOpenPlayer),
+        )
+        IconButton(onClick = { vm.togglePlay() }) {
+            Icon(
+                if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                contentDescription = if (state.isPlaying) "Pause" else "Play",
+            )
         }
     }
 }
