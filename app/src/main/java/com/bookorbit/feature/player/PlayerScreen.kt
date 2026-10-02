@@ -6,12 +6,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
@@ -39,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -110,100 +116,15 @@ fun PlayerScreen(
         state.chapters.getOrNull(idx + 1)?.let { vm.seekToAbsolute(it.startSec) }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Close")
-            }
-            Text(
-                "NOW PLAYING",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-                textAlign = TextAlign.Center,
-            )
-            if (ranges.isNotEmpty()) {
-                IconButton(onClick = { showChapters = true }) {
-                    Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Chapters")
-                }
-            }
-            CastButton()
-            val timerActive = state.sleepTimerRemainingSec != null
-            IconButton(onClick = { showSleepTimerSheet = true }) {
-                Icon(
-                    Icons.Filled.Bedtime,
-                    contentDescription = if (timerActive) "Sleep timer active" else "Sleep timer",
-                    tint = if (timerActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+    val config = LocalConfiguration.current
+    val isLandscape = config.screenHeightDp < config.screenWidthDp
 
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            AsyncImage(
-                model = imageUrls.cover(book.id),
-                contentDescription = book.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth(0.78f)
-                    .aspectRatio(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surface),
-            )
-            Text(
-                book.title ?: "Audiobook",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 24.dp),
-            )
-            Text(
-                PlaybackQueue.performerLabel(book),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-            if (state.isCasting) {
-                Text(
-                    "Casting to ${state.castDeviceName ?: "device"}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-            currentChapter?.let {
-                Text(
-                    "${it.title} ▾",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.clickable { showChapters = true }.padding(top = 8.dp),
-                )
-            }
-            state.playerError?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 8.dp, start = 16.dp, end = 16.dp),
-                )
-            }
-        }
+    // Shared composables used by both layout branches.
+    val sliderValue = sliderRange?.let { PlaybackQueue.toChapterTime(it, displayBookPos) } ?: displayBookPos
+    val sliderMax = sliderRange?.lengthSec ?: total
+    val timerActive = state.sleepTimerRemainingSec != null
 
-        val sliderValue = sliderRange?.let { PlaybackQueue.toChapterTime(it, displayBookPos) } ?: displayBookPos
-        val sliderMax = sliderRange?.lengthSec ?: total
+    val progressSection: @Composable () -> Unit = {
         Slider(
             value = sliderValue.toFloat(),
             onValueChange = { if (scrubbing == null) scrubRange = liveRange; scrubbing = it },
@@ -231,11 +152,11 @@ fun PlayerScreen(
                 textAlign = TextAlign.Center,
             )
         }
+    }
 
+    val transportRow: @Composable () -> Unit = {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -272,7 +193,9 @@ fun PlayerScreen(
                 Icon(Icons.Filled.SkipNext, contentDescription = "Next chapter")
             }
         }
+    }
 
+    val speedChips: @Composable () -> Unit = {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
@@ -285,6 +208,253 @@ fun PlayerScreen(
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
             }
+        }
+    }
+
+    if (isLandscape) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Left pane: square cover sized to available height, never cropped.
+            AsyncImage(
+                model = imageUrls.cover(book.id),
+                contentDescription = book.title,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .aspectRatio(1f)
+                    .padding(12.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surface),
+            )
+
+            // Right pane: all controls.
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
+            ) {
+                // Title + author + optional status lines.
+                Column {
+                    Text(
+                        book.title ?: "Audiobook",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        PlaybackQueue.performerLabel(book),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                    if (state.isCasting) {
+                        Text(
+                            "Casting to ${state.castDeviceName ?: "device"}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                    currentChapter?.let {
+                        Text(
+                            "${it.title} ▾",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.clickable { showChapters = true }.padding(top = 4.dp),
+                        )
+                    }
+                    state.playerError?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
+
+                // Progress bar + times.
+                Column { progressSection() }
+
+                // Transport controls.
+                transportRow()
+
+                // Speed chips.
+                speedChips()
+
+                // Bottom row: collapse + chapters + cast + sleep timer.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Close")
+                    }
+                    Row {
+                        if (ranges.isNotEmpty()) {
+                            IconButton(onClick = { showChapters = true }) {
+                                Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Chapters")
+                            }
+                        }
+                        CastButton()
+                        IconButton(onClick = { showSleepTimerSheet = true }) {
+                            Icon(
+                                Icons.Filled.Bedtime,
+                                contentDescription = if (timerActive) "Sleep timer active" else "Sleep timer",
+                                tint = if (timerActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        // Portrait: original layout unchanged.
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Close")
+                }
+                Text(
+                    "NOW PLAYING",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                    textAlign = TextAlign.Center,
+                )
+                if (ranges.isNotEmpty()) {
+                    IconButton(onClick = { showChapters = true }) {
+                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Chapters")
+                    }
+                }
+                CastButton()
+                IconButton(onClick = { showSleepTimerSheet = true }) {
+                    Icon(
+                        Icons.Filled.Bedtime,
+                        contentDescription = if (timerActive) "Sleep timer active" else "Sleep timer",
+                        tint = if (timerActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                AsyncImage(
+                    model = imageUrls.cover(book.id),
+                    contentDescription = book.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth(0.78f)
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surface),
+                )
+                Text(
+                    book.title ?: "Audiobook",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 24.dp),
+                )
+                Text(
+                    PlaybackQueue.performerLabel(book),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                if (state.isCasting) {
+                    Text(
+                        "Casting to ${state.castDeviceName ?: "device"}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+                currentChapter?.let {
+                    Text(
+                        "${it.title} ▾",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable { showChapters = true }.padding(top = 8.dp),
+                    )
+                }
+                state.playerError?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 8.dp, start = 16.dp, end = 16.dp),
+                    )
+                }
+            }
+
+            progressSection()
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = { prevChapter() }, enabled = state.chapters.isNotEmpty()) {
+                    Icon(Icons.Filled.SkipPrevious, contentDescription = "Previous chapter")
+                }
+                IconButton(onClick = { vm.skipBack() }) {
+                    Icon(Icons.Filled.Replay10, contentDescription = "Skip back")
+                }
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(RoundedCornerShape(36.dp))
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (state.buffering) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(28.dp))
+                    } else {
+                        IconButton(onClick = { vm.togglePlay() }) {
+                            Icon(
+                                if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = if (state.isPlaying) "Pause" else "Play",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(38.dp),
+                            )
+                        }
+                    }
+                }
+                IconButton(onClick = { vm.skipForward() }) {
+                    Icon(Icons.Filled.Forward30, contentDescription = "Skip forward")
+                }
+                IconButton(onClick = { nextChapter() }, enabled = state.chapters.isNotEmpty()) {
+                    Icon(Icons.Filled.SkipNext, contentDescription = "Next chapter")
+                }
+            }
+
+            speedChips()
         }
     }
 
