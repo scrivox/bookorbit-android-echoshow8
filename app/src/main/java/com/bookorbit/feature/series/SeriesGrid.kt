@@ -19,6 +19,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
@@ -34,6 +35,7 @@ fun SeriesGrid(
     onSelect: (SeriesSummary) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val isLandscape = LocalConfiguration.current.let { it.screenHeightDp < it.screenWidthDp }
     val refreshing = series.loadState.refresh is LoadState.Loading
     PullToRefreshBox(
         isRefreshing = refreshing,
@@ -41,7 +43,7 @@ fun SeriesGrid(
         modifier = modifier.fillMaxSize(),
     ) {
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            columns = if (isLandscape) GridCells.Adaptive(minSize = 160.dp) else GridCells.Fixed(2),
             contentPadding = PaddingValues(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),

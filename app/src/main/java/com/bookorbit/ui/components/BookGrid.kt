@@ -16,6 +16,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
@@ -34,6 +35,7 @@ fun BookGrid(
     emptyText: String,
     modifier: Modifier = Modifier,
 ) {
+    val isLandscape = LocalConfiguration.current.let { it.screenHeightDp < it.screenWidthDp }
     val refreshing = items.loadState.refresh is LoadState.Loading
     PullToRefreshBox(
         isRefreshing = refreshing,
@@ -41,7 +43,7 @@ fun BookGrid(
         modifier = modifier.fillMaxSize(),
     ) {
         LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
+            columns = if (isLandscape) GridCells.Adaptive(minSize = 130.dp) else GridCells.Fixed(3),
             contentPadding = PaddingValues(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),

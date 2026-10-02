@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -49,6 +50,8 @@ fun BookCard(
     val imageUrls = LocalImageUrls.current
     val primaryFormat = BookFiles.badgeFormat(book.files)
     val progress = book.readingProgress
+    val isLandscape = LocalConfiguration.current.let { it.screenHeightDp < it.screenWidthDp }
+    val isAudio = primaryFormat != null && primaryFormat in BookFiles.AUDIO_FORMATS
 
     Column(
         modifier = modifier
@@ -59,13 +62,13 @@ fun BookCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(2f / 3f),
+                .aspectRatio(if (isLandscape && isAudio) 1f else 2f / 3f),
         ) {
             if (book.hasCover) {
                 AsyncImage(
                     model = imageUrls.cover(book.id),
                     contentDescription = book.title,
-                    contentScale = ContentScale.Crop,
+                    contentScale = if (isLandscape) ContentScale.Fit else ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
