@@ -1,8 +1,14 @@
 package com.bookorbit.feature.main
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
 import androidx.compose.material.icons.filled.Download
@@ -27,6 +33,8 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -35,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -84,8 +93,9 @@ private object DrawerRoute {
 private const val BOOK_DOCK_PERMISSION = "book_dock_access"
 
 /**
- * Authenticated shell: a navigation drawer (profile, Authors/Series/Downloads, sign out) plus a
- * bottom navigation bar over a nested NavHost for the five primary tabs.
+ * Authenticated shell: a navigation drawer (profile, Authors/Series/Downloads, sign out) plus
+ * navigation — bottom bar in portrait, left NavigationRail in landscape — over a nested NavHost
+ * for the five primary tabs.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -111,6 +121,9 @@ fun MainShell(
     // Book detail lives inside the shell's nav host so the bottom bar + mini-player stay visible.
     val isBookDetail = currentRoute == DrawerRoute.BOOK_DETAIL
     val onBookClick: (Int) -> Unit = { id -> tabNav.navigate(DrawerRoute.bookDetail(id)) }
+
+    val config = LocalConfiguration.current
+    val isLandscape = config.screenHeightDp < config.screenWidthDp
 
     fun navigateTab(route: String) {
         tabNav.navigate(route) {
@@ -139,6 +152,38 @@ fun MainShell(
         else -> "BookOrbit"
     }
 
+    // Shared NavHost destinations — same in both layout branches.
+    val navHost: @Composable (Modifier) -> Unit = { mod ->
+        NavHost(
+            navController = tabNav,
+            startDestination = Tab.DASHBOARD.route,
+            modifier = mod,
+        ) {
+            composable(Tab.DASHBOARD.route) { DashboardScreen(onBookClick = onBookClick) }
+            composable(Tab.LIBRARIES.route) { LibrariesScreen(onBookClick = onBookClick) }
+            composable(Tab.SEARCH.route) { SearchScreen(onBookClick = onBookClick) }
+            composable(Tab.SCOPES.route) { SmartScopesScreen(onBookClick = onBookClick) }
+            composable(Tab.COLLECTIONS.route) { CollectionsScreen(onBookClick = onBookClick) }
+            composable(DrawerRoute.AUTHORS) { AuthorsScreen(onBookClick = onBookClick) }
+            composable(DrawerRoute.SERIES) { SeriesScreen(onBookClick = onBookClick) }
+            composable(DrawerRoute.DOWNLOADS) { DownloadsScreen(onBookClick = onBookClick) }
+            composable(DrawerRoute.BOOK_DROP) { BookDropScreen() }
+            composable(DrawerRoute.SETTINGS) { SettingsScreen() }
+            composable(
+                route = DrawerRoute.BOOK_DETAIL,
+                arguments = listOf(navArgument("id") { type = NavType.IntType }),
+            ) {
+                BookDetailScreen(
+                    onBack = { tabNav.popBackStack() },
+                    onRead = onOpenReader,
+                    onReadPdf = onOpenPdf,
+                    onListen = onListen,
+                    onBookClick = onBookClick,
+                )
+            }
+        }
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -152,64 +197,79 @@ fun MainShell(
             )
         },
     ) {
-        Scaffold(
-            topBar = {
-                // Book detail renders its own top bar (with a back arrow); hide the shell's here so
-                // there aren't two stacked app bars.
-                if (!isBookDetail) {
-                    TopAppBar(
-                        title = { Text(title) },
-                        navigationIcon = {
-                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                Icon(Icons.Filled.Menu, contentDescription = "Menu")
-                            }
-                        },
-                    )
-                }
-            },
-            bottomBar = {
-                Column {
-                    MiniPlayer(onOpenPlayer = onOpenPlayer)
-                    NavigationBar {
-                        Tab.entries.forEach { tab ->
-                            NavigationBarItem(
-                                selected = currentRoute == tab.route,
-                                onClick = { navigateTab(tab.route) },
-                                icon = { Icon(tab.icon, contentDescription = tab.label) },
-                                label = { Text(tab.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                            )
+        if (isLandscape) {
+            // Landscape: NavigationRail on the left, Scaffold (with MiniPlayer as its slim
+            // bottomBar) on the right. The outer Row consumes all system-bar insets via
+            // safeDrawing so neither the rail nor the scaffold double-count them.
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing),
+            ) {
+                NavigationRail(
+                    modifier = Modifier.fillMaxHeight(),
+                    // safeDrawing on the outer Row already handled all insets.
+                    windowInsets = WindowInsets(0),
+                    header = {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(Icons.Filled.Menu, contentDescription = "Menu")
                         }
+                    },
+                ) {
+                    Tab.entries.forEach { tab ->
+                        NavigationRailItem(
+                            selected = currentRoute == tab.route,
+                            onClick = { navigateTab(tab.route) },
+                            icon = { Icon(tab.icon, contentDescription = tab.label) },
+                        )
                     }
                 }
-            },
-        ) { padding ->
-            NavHost(
-                navController = tabNav,
-                startDestination = Tab.DASHBOARD.route,
-                modifier = Modifier.padding(padding),
-            ) {
-                composable(Tab.DASHBOARD.route) { DashboardScreen(onBookClick = onBookClick) }
-                composable(Tab.LIBRARIES.route) { LibrariesScreen(onBookClick = onBookClick) }
-                composable(Tab.SEARCH.route) { SearchScreen(onBookClick = onBookClick) }
-                composable(Tab.SCOPES.route) { SmartScopesScreen(onBookClick = onBookClick) }
-                composable(Tab.COLLECTIONS.route) { CollectionsScreen(onBookClick = onBookClick) }
-                composable(DrawerRoute.AUTHORS) { AuthorsScreen(onBookClick = onBookClick) }
-                composable(DrawerRoute.SERIES) { SeriesScreen(onBookClick = onBookClick) }
-                composable(DrawerRoute.DOWNLOADS) { DownloadsScreen(onBookClick = onBookClick) }
-                composable(DrawerRoute.BOOK_DROP) { BookDropScreen() }
-                composable(DrawerRoute.SETTINGS) { SettingsScreen() }
-                composable(
-                    route = DrawerRoute.BOOK_DETAIL,
-                    arguments = listOf(navArgument("id") { type = NavType.IntType }),
-                ) {
-                    BookDetailScreen(
-                        onBack = { tabNav.popBackStack() },
-                        onRead = onOpenReader,
-                        onReadPdf = onOpenPdf,
-                        onListen = onListen,
-                        onBookClick = onBookClick,
-                    )
+                Scaffold(
+                    topBar = {
+                        // Book detail renders its own top bar; no hamburger here — it's in the rail.
+                        if (!isBookDetail) {
+                            TopAppBar(title = { Text(title) })
+                        }
+                    },
+                    bottomBar = { MiniPlayer(onOpenPlayer = onOpenPlayer) },
+                    // Insets already absorbed by the outer Row.
+                    contentWindowInsets = WindowInsets(0),
+                ) { padding ->
+                    navHost(Modifier.padding(padding))
                 }
+            }
+        } else {
+            // Portrait: original bottom-bar layout, unchanged.
+            Scaffold(
+                topBar = {
+                    if (!isBookDetail) {
+                        TopAppBar(
+                            title = { Text(title) },
+                            navigationIcon = {
+                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                    Icon(Icons.Filled.Menu, contentDescription = "Menu")
+                                }
+                            },
+                        )
+                    }
+                },
+                bottomBar = {
+                    Column {
+                        MiniPlayer(onOpenPlayer = onOpenPlayer)
+                        NavigationBar {
+                            Tab.entries.forEach { tab ->
+                                NavigationBarItem(
+                                    selected = currentRoute == tab.route,
+                                    onClick = { navigateTab(tab.route) },
+                                    icon = { Icon(tab.icon, contentDescription = tab.label) },
+                                    label = { Text(tab.label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                )
+                            }
+                        }
+                    }
+                },
+            ) { padding ->
+                navHost(Modifier.padding(padding))
             }
         }
     }
